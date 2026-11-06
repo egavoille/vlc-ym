@@ -16,11 +16,19 @@ Amstrad CPC, Atari ST, ZX Spectrum, MSX…), basé sur la bibliothèque
 - Options (Préférences → Tout → Entrée/Codecs → Démultiplexeurs → YM) :
   filtre passe-bas (activé par défaut) et lecture en boucle.
 
+## Téléchargement
+
+Les plugins compilés sont sur la page des
+**[Releases](https://github.com/egavoille/vlc-ym/releases/latest)**, section *Assets* :
+
+- `vlc-ym-…-windows-x64.zip` : Windows 10/11 64 bits, VLC 3.0.x officiel ;
+- `vlc-ym-…-linux-x86_64-debian-ubuntu.zip` : Debian / Ubuntu récents.
+
 ## Installation
 
 ### Windows (VLC 3.0.x 64 bits)
 
-1. Copier `bin/windows-x64/libym_plugin.dll` dans
+1. Décompresser le zip Windows et copier `libym_plugin.dll` dans
    `C:\Program Files\VideoLAN\VLC\plugins\demux\`
 2. Mettre à jour le cache des plugins : ouvrir une invite de commandes
    **en administrateur** puis :
@@ -43,7 +51,7 @@ le point d'entrée `vlc_entry__3_0_0ft64`. Sur les autres distributions, recompi
 avec `make`, qui utilise les en-têtes VLC installés sur la machine.
 
 ```
-sudo cp bin/linux-x86_64/libym_plugin.so /usr/lib/x86_64-linux-gnu/vlc/plugins/demux/
+sudo cp libym_plugin.so /usr/lib/x86_64-linux-gnu/vlc/plugins/demux/
 sudo /usr/lib/x86_64-linux-gnu/vlc/vlc-cache-gen /usr/lib/x86_64-linux-gnu/vlc/plugins
 ```
 
