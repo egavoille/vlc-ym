@@ -1,0 +1,18 @@
+LIBRARY libvlccore.dll
+EXPORTS
+block_Alloc
+date_Get
+date_Increment
+date_Init
+date_Set
+demux_vaControlHelper
+es_format_Init
+var_Inherit
+vlc_Log
+vlc_meta_Set
+vlc_mutex_lock
+vlc_mutex_unlock
+vlc_stream_Peek
+vlc_stream_Read
+vlc_stream_vaControl
+vlc_stream_Seek

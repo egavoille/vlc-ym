@@ -1,0 +1,456 @@
+diff -ruN a/StSoundLibrary/LZH/LzhLib.cpp b/StSoundLibrary/LZH/LzhLib.cpp
+--- a/StSoundLibrary/LZH/LzhLib.cpp	2026-11-06 16:34:17.481159580 +0100
++++ b/StSoundLibrary/LZH/LzhLib.cpp	2026-11-06 16:34:17.482829093 +0100
+@@ -129,13 +129,23 @@
+     for (i = 1; i <= 16; i++)
+         count[i] = 0;
+     for (i = 0; i < nchar; i++)
++    {
++        if (bitlen[i] > 16)     /* [vlc-ym] archive corrompue */
++            return (1);
+         count[bitlen[i]]++;
++    }
+ 
++    {   /* [vlc-ym] somme calculée sans troncature : en ushort, une table
++         * corrompue pouvait « boucler » à 65536 et passer le contrôle */
++        uint total = 0;
++        for (i = 1; i <= 16; i++)
++            total += (uint)count[i] << (16 - i);
++        if (total != (1U << 16))
++            return (1); /* error: bad table */
++    }
+     start[1] = 0;
+     for (i = 1; i <= 16; i++)
+         start[i + 1] = start[i] + (count[i] << (16 - i));
+-    if (start[17] != (ushort) (1U << 16))
+-        return (1); /* error: bad table */
+ 
+     jutbits = 16 - tablebits;
+     for (i = 1; i <= tablebits; i++)
+@@ -207,9 +217,19 @@
+     ushort mask;
+ 
+     n = getbits (nbit);
++    if (n > nn)                 /* [vlc-ym] archive corrompue */
++    {
++        with_error = 1;
++        n = nn;
++    }
+     if (n == 0)
+     {
+         c = getbits (nbit);
++        if (c >= nn)            /* [vlc-ym] */
++        {
++            with_error = 1;
++            c = 0;
++        }
+         for (i = 0; i < nn; i++)
+             pt_len[i] = 0;
+         for (i = 0; i < 256; i++)
+@@ -235,13 +255,14 @@
+             if (i == i_special)
+             {
+                 c = getbits (2);
+-                while (--c >= 0)
++                while (--c >= 0 && i < nn)  /* [vlc-ym] borne */
+                     pt_len[i++] = 0;
+             }
+         }
+         while (i < nn)
+             pt_len[i++] = 0;
+-        make_table (nn, pt_len, 8, pt_table);
++        if (make_table (nn, pt_len, 8, pt_table))  /* [vlc-ym] */
++            with_error = 1;
+     }
+ }
+ 
+@@ -251,9 +272,19 @@
+     ushort mask;
+ 
+     n = getbits (CBIT);
++    if (n > NC)                 /* [vlc-ym] archive corrompue */
++    {
++        with_error = 1;
++        n = NC;
++    }
+     if (n == 0)
+     {
+         c = getbits (CBIT);
++        if (c >= NC)            /* [vlc-ym] */
++        {
++            with_error = 1;
++            c = 0;
++        }
+         for (i = 0; i < NC; i++)
+             c_len[i] = 0;
+         for (i = 0; i < 4096; i++)
+@@ -286,7 +317,7 @@
+                     c = getbits (4) + 3;
+                 else
+                     c = getbits (CBIT) + 20;
+-                while (--c >= 0)
++                while (--c >= 0 && i < NC)  /* [vlc-ym] borne */
+                     c_len[i++] = 0;
+             }
+             else
+@@ -294,7 +325,8 @@
+         }
+         while (i < NC)
+             c_len[i++] = 0;
+-        make_table (NC, c_len, 12, c_table);
++        if (make_table (NC, c_len, 12, c_table))  /* [vlc-ym] */
++            with_error = 1;
+     }
+ }
+ 
+diff -ruN a/StSoundLibrary/Ym2149Ex.cpp b/StSoundLibrary/Ym2149Ex.cpp
+--- a/StSoundLibrary/Ym2149Ex.cpp	2026-11-06 16:34:17.481187698 +0100
++++ b/StSoundLibrary/Ym2149Ex.cpp	2026-11-06 16:34:17.482996395 +0100
+@@ -177,7 +177,7 @@
+ #ifdef YM_INTEGER_ONLY
+ 	yms64 step = internalClock;
+ 	step <<= (15+16-3);
+-	step /= (per * replayFrequency);
++	step /= ((yms64)per * replayFrequency);  // [vlc-ym] Ã©vite un dÃ©bordement int (UB)
+ #else
+ 	ymfloat step = internalClock;
+ 	step /= ((ymfloat)per*8.0*(ymfloat)replayFrequency);
+@@ -198,7 +198,7 @@
+ #ifdef YM_INTEGER_ONLY
+ 	yms64 step = internalClock;
+ 	step <<= (16-1-3);
+-	step /= (per * replayFrequency);
++	step /= ((yms64)per * replayFrequency);  // [vlc-ym] Ã©vite un dÃ©bordement int (UB)
+ #else
+ 	ymfloat step = internalClock;
+ 	step /= ((ymfloat)per*8.0*(ymfloat)replayFrequency);
+@@ -227,7 +227,7 @@
+ #ifdef YM_INTEGER_ONLY
+ 	yms64 step = internalClock;
+ 	step <<= (16+16-9);
+-	step /= (per * replayFrequency);
++	step /= ((yms64)per * replayFrequency);  // [vlc-ym] Ã©vite un dÃ©bordement int (UB)
+ #else
+ 	ymfloat step = internalClock;
+ 	step /= ((ymfloat)per*512.0*(ymfloat)replayFrequency);
+diff -ruN a/StSoundLibrary/YmMusic.cpp b/StSoundLibrary/YmMusic.cpp
+--- a/StSoundLibrary/YmMusic.cpp	2026-11-06 16:34:17.481251169 +0100
++++ b/StSoundLibrary/YmMusic.cpp	2026-11-06 16:34:17.482879624 +0100
+@@ -91,6 +91,8 @@
+ 
+ void	CYmMusic::setPlayerRate(ymint rate)
+ {
++		// [vlc-ym] une cadence nulle ou >= fréquence de sortie bloquerait update()
++		if ((rate <= 0) || (rate > 1000)) rate = 50;
+ 		playerRate = rate;
+ }
+ 
+@@ -418,7 +420,7 @@
+ 			ymChip.writeRegister(7,ymChip.readRegister(7)|0x24)	;	// Coupe TONE + NOISE canal C.
+ 			sampleNum = ptr[10]&0x7f;		// Numero du sample
+ 
+-			if (ptr[12])
++			if ((ptr[12]) && (sampleNum < 40))	// [vlc-ym] table digidrum.cpp de 40 entrées
+ 			{
+ 				sampleFrq = ((MFP_CLOCK/4) / ptr[12]);
+ 				ymChip.drumStart(	2,							// Voice C
+@@ -722,7 +724,7 @@
+ 				pVoice[i].sampleVolume = pLine->volume&63;
+ 				pVoice[i].bLoop = (pLine->volume&0x40);
+ 				n = pLine->noteOn;
+-				if (n != 0xff)		// Note ON.
++				if ((n != 0xff) && (n < nbDrum))		// Note ON. [vlc-ym] index borné
+ 				{
+ 					pVoice[i].bRunning = 1;
+ 					pVoice[i].pSample = pDrumTab[n].pData;
+diff -ruN a/StSoundLibrary/Ymload.cpp b/StSoundLibrary/Ymload.cpp
+--- a/StSoundLibrary/Ymload.cpp	2026-11-06 16:34:17.481319293 +0100
++++ b/StSoundLibrary/Ymload.cpp	2026-11-06 16:34:17.482925035 +0100
+@@ -67,6 +67,27 @@
+ 	return out;
+ }
+ 
++// [vlc-ym] Durcissement contre les fichiers corrompus :
++// - chaque buffer décodé est suivi de YM_SAFE_PAD octets à zéro, ce qui rend
++//   inoffensives les petites lectures au-delà de la fin (champs d'en-tête,
++//   chaînes non terminées) ;
++// - les champs pouvant faire lire loin (tailles, nombres de frames) sont
++//   vérifiés explicitement dans ymDecode().
++#define	YM_SAFE_PAD			65536
++#define	YM_MAX_DEPACKED		(64u<<20)
++
++static ymu8 *padBuffer(ymu8 *p, ymu32 size)
++{
++	ymu8 *n = (ymu8*)realloc(p, (size_t)size + YM_SAFE_PAD);
++	if (!n)
++	{
++		free(p);
++		return NULL;
++	}
++	memset(n + size, 0, YM_SAFE_PAD);
++	return n;
++}
++
+ ymu32      readMotorolaDword(ymu8 **ptr)
+ {
+ ymu32 n;
+@@ -89,12 +110,17 @@
+         return n;
+ }
+ 
+-ymchar    *readNtString(ymchar **ptr)
++// [vlc-ym] Corrigé : l'appelant passait un ymu8** casté en char**, ce qui viole
++// la règle de strict aliasing du C++ ; avec -O1/-O2 le pointeur de lecture
++// n'était pas mis à jour et le flux de registres YM5/YM6 était lu au mauvais
++// endroit (son faux). On travaille désormais directement sur un ymu8**.
++ymchar    *readNtString(ymu8 **ptr)
+ {
+ ymchar *p;
++const char *s = (const char *)(*ptr);
+ 
+-		p = mstrdup(*ptr);
+-		(*ptr) += strlen(*ptr)+1;
++		p = mstrdup(s);
++		(*ptr) += strlen(s)+1;
+         return p;
+ }
+ 
+@@ -124,9 +150,16 @@
+  ymu8	*pNew;
+  ymu8	*pSrc;
+ 
++		pBigMalloc = padBuffer(pBigMalloc, checkOriginalSize);	// [vlc-ym]
++		if (!pBigMalloc)
++		{
++			setLastError("MALLOC Failed !");
++			return NULL;
++		}
+ 		pHeader = (lzhHeader_t*)pBigMalloc;
+ 
+-		if ((pHeader->size==0) ||					// NOTE: Endianness works because value is 0
++		if ((checkOriginalSize < sizeof(lzhHeader_t)) ||		// [vlc-ym]
++			(pHeader->size==0) ||					// NOTE: Endianness works because value is 0
+ 			(strncmp(pHeader->id,"-lh5-",5)))
+ 		{ // Le fichier n'est pas compresse, on retourne l'original.
+ 			return pBigMalloc;
+@@ -135,7 +168,15 @@
+ 		fileSize = (ymu32)-1;
+ 
+ 		fileSize = ReadLittleEndian32((ymu8*)&pHeader->original);
+-		pNew = (ymu8*)malloc(fileSize);
++		if ((fileSize == 0) || (fileSize > YM_MAX_DEPACKED) ||	// [vlc-ym]
++			((ymu32)pHeader->size + 2 > checkOriginalSize))
++		{
++			setLastError("LH5 Depacking Error !");
++			free(pBigMalloc);
++			pBigMalloc = NULL;
++			return NULL;
++		}
++		pNew = (ymu8*)calloc((size_t)fileSize + YM_SAFE_PAD, 1);	// [vlc-ym] marge à zéro
+ 		if (!pNew)
+ 		{
+ 			setLastError("MALLOC Failed !");
+@@ -260,7 +301,13 @@
+  ymu32 sampleSize;
+  yms32 tmp;
+  ymu32 id;
++ ymu8 *pEnd = pBigMalloc + fileSize;		// [vlc-ym] fin des données valides
+ 
++		if (fileSize < 4)
++		{
++			setLastError("Not a valid YM format !");
++			return YMFALSE;
++		}
+ 
+ 		id = ReadBigEndian32((unsigned char*)pBigMalloc);
+ 		switch (id)
+@@ -268,6 +315,7 @@
+ 			case e_YM2a://'YM2!':		// MADMAX specific.
+ 				songType = YM_V2;
+ 				nbFrame = (fileSize-4)/14;
++				if (nbFrame <= 0) { setLastError("Not a valid YM format !"); return YMFALSE; }	// [vlc-ym]
+ 				loopFrame = 0;
+ 				ymChip.setClock(ATARI_CLOCK);
+ 				setPlayerRate(50);
+@@ -285,6 +333,7 @@
+ 			case e_YM3a://'YM3!':		// Standart YM-Atari format.
+ 				songType = YM_V3;
+ 				nbFrame = (fileSize-4)/14;
++				if (nbFrame <= 0) { setLastError("Not a valid YM format !"); return YMFALSE; }	// [vlc-ym]
+ 				loopFrame = 0;
+ 				ymChip.setClock(ATARI_CLOCK);
+ 				setPlayerRate(50);
+@@ -303,6 +352,7 @@
+ 				pUD = (ymu8*)(pBigMalloc+fileSize-4);
+ 				songType = YM_V3;
+ 				nbFrame = (fileSize-4)/14;
++				if (nbFrame <= 0) { setLastError("Not a valid YM format !"); return YMFALSE; }	// [vlc-ym]
+ 				loopFrame = ReadLittleEndian32(pUD);
+ 				ymChip.setClock(ATARI_CLOCK);
+ 				setPlayerRate(50);
+@@ -338,12 +388,20 @@
+ 				loopFrame = readMotorolaDword(&ptr);
+ 				skip = readMotorolaWord(&ptr);
+ 				ptr += skip;
++				if (ptr > pEnd) { setLastError("Corrupted YM file !"); return YMFALSE; }	// [vlc-ym]
+ 				if (nbDrum>0)
+ 				{
+-					pDrumTab=(digiDrum_t*)malloc(nbDrum*sizeof(digiDrum_t));
++					pDrumTab=(digiDrum_t*)calloc(nbDrum,sizeof(digiDrum_t));	// [vlc-ym] calloc
++					if (!pDrumTab) { nbDrum = 0; setLastError("MALLOC Error"); return YMFALSE; }
+ 					for (i=0;i<nbDrum;i++)
+ 					{
+ 						pDrumTab[i].size = readMotorolaDword(&ptr);
++						if ((ptr > pEnd) || (pDrumTab[i].size > (ymu32)(pEnd - ptr)))	// [vlc-ym]
++						{
++							pDrumTab[i].size = 0;
++							setLastError("Corrupted YM file !");
++							return YMFALSE;
++						}
+ 						if (pDrumTab[i].size)
+ 						{
+ 							pDrumTab[i].pData = (ymu8*)malloc(pDrumTab[i].size);
+@@ -367,9 +425,9 @@
+ 					}
+ 					attrib &= (~A_DRUM4BITS);
+ 				}
+-				pSongName = readNtString((char**)&ptr);
+-				pSongAuthor = readNtString((char**)&ptr);
+-				pSongComment = readNtString((char**)&ptr);
++				pSongName = readNtString(&ptr);
++				pSongAuthor = readNtString(&ptr);
++				pSongComment = readNtString(&ptr);
+ 				songType = YM_V5;
+ 				if (id==e_YM6a)//'YM6!')
+ 				{
+@@ -383,6 +441,14 @@
+ 				pDataStream = ptr;
+ 				streamInc = 16;
+ 				pSongPlayer = mstrdup("YM-Chip driver");
++				// [vlc-ym] le flux de registres doit tenir dans le fichier
++				if ((nbFrame <= 0) || (ptr > pEnd) ||
++					((yms64)nbFrame * streamInc > (yms64)(pEnd - ptr)))
++				{
++					setLastError("Corrupted YM file !");
++					return YMFALSE;
++				}
++				if ((loopFrame < 0) || (loopFrame >= nbFrame)) loopFrame = 0;
+ 				break;
+ 
+ 			case e_MIX1://'MIX1':		// ATARI Remix digit format.
+@@ -399,7 +465,13 @@
+ 				if (tmp&1) setAttrib(A_DRUMSIGNED);
+ 				sampleSize = readMotorolaDword(&ptr);
+ 				nbMixBlock = readMotorolaDword(&ptr);
+-				pMixBlock = (mixBlock_t*)malloc(nbMixBlock*sizeof(mixBlock_t));
++				// [vlc-ym] chaque bloc occupe 12 octets dans le fichier
++				if ((nbMixBlock <= 0) || ((yms64)nbMixBlock * 12 > (yms64)(pEnd - ptr)))
++				{
++					setLastError("Corrupted YM file !");
++					return YMFALSE;
++				}
++				pMixBlock = (mixBlock_t*)calloc(nbMixBlock,sizeof(mixBlock_t));
+ 				for (i=0;i<nbMixBlock;i++)
+ 				{	// Lecture des block-infos.
+ 					pMixBlock[i].sampleStart = readMotorolaDword(&ptr);
+@@ -407,11 +479,27 @@
+ 					pMixBlock[i].nbRepeat = readMotorolaWord(&ptr);
+ 					pMixBlock[i].replayFreq = readMotorolaWord(&ptr);
+ 				}
+-				pSongName = readNtString((char**)&ptr);
+-				pSongAuthor = readNtString((char**)&ptr);
+-				pSongComment = readNtString((char**)&ptr);
++				pSongName = readNtString(&ptr);
++				pSongAuthor = readNtString(&ptr);
++				pSongComment = readNtString(&ptr);
+ 
++				// [vlc-ym] échantillons dans le fichier, blocs dans les échantillons
++				if ((ptr > pEnd) || (sampleSize == 0) || (sampleSize > (ymu32)(pEnd - ptr)))
++				{
++					setLastError("Corrupted YM file !");
++					return YMFALSE;
++				}
++				for (i=0;i<nbMixBlock;i++)
++				{
++					if ((pMixBlock[i].replayFreq == 0) ||
++						((yms64)pMixBlock[i].sampleStart + pMixBlock[i].sampleLength > (yms64)sampleSize))
++					{
++						setLastError("Corrupted YM file !");
++						return YMFALSE;
++					}
++				}
+ 				pBigSampleBuffer = (unsigned char*)malloc(sampleSize);
++				if (!pBigSampleBuffer) { setLastError("MALLOC Error"); return YMFALSE; }
+ 				memcpy(pBigSampleBuffer,ptr,sampleSize);
+ 
+ 				if (!(attrib&A_DRUMSIGNED))
+@@ -462,12 +550,19 @@
+ 				loopFrame = readMotorolaDword(&ptr);
+ 				nbDrum = readMotorolaWord(&ptr);
+ 				attrib = readMotorolaDword(&ptr);
+-				pSongName = readNtString((char**)&ptr);
+-				pSongAuthor = readNtString((char**)&ptr);
+-				pSongComment = readNtString((char**)&ptr);
++				pSongName = readNtString(&ptr);
++				pSongAuthor = readNtString(&ptr);
++				pSongComment = readNtString(&ptr);
++				// [vlc-ym] contrôles de cohérence YM-Tracker
++				if ((nbVoice <= 0) || (nbVoice > MAX_VOICE) || (nbFrame <= 0) || (ptr > pEnd))
++				{
++					setLastError("Corrupted YM file !");
++					return YMFALSE;
++				}
+ 				if (nbDrum>0)
+ 				{
+-					pDrumTab=(digiDrum_t*)malloc(nbDrum*sizeof(digiDrum_t));
++					pDrumTab=(digiDrum_t*)calloc(nbDrum,sizeof(digiDrum_t));	// [vlc-ym] calloc
++					if (!pDrumTab) { nbDrum = 0; setLastError("MALLOC Error"); return YMFALSE; }
+ 					for (i=0;i<(ymint)nbDrum;i++)
+ 					{
+ 						pDrumTab[i].size = readMotorolaWord(&ptr);
+@@ -477,6 +572,12 @@
+ 							pDrumTab[i].repLen = readMotorolaWord(&ptr);	// repLen
+ 							readMotorolaWord(&ptr);		// flag
+ 						}
++						if ((ptr > pEnd) || (pDrumTab[i].size > (ymu32)(pEnd - ptr)))	// [vlc-ym]
++						{
++							pDrumTab[i].size = 0;
++							setLastError("Corrupted YM file !");
++							return YMFALSE;
++						}
+ 						if (pDrumTab[i].repLen>pDrumTab[i].size)
+ 						{
+ 							pDrumTab[i].repLen = pDrumTab[i].size;
+@@ -509,6 +610,14 @@
+ 
+ 
+ 				pDataStream = ptr;
++				// [vlc-ym] le flux tracker doit tenir dans le fichier
++				if ((ptr > pEnd) ||
++					((yms64)nbFrame * nbVoice * (yms64)sizeof(ymTrackerLine_t) > (yms64)(pEnd - ptr)))
++				{
++					setLastError("Corrupted YM file !");
++					return YMFALSE;
++				}
++				if ((loopFrame < 0) || (loopFrame >= nbFrame)) loopFrame = 0;
+ 				ymChip.setClock(ATARI_CLOCK);
+ 
+ 				ymTrackerInit(100);		// 80% de volume maxi.
+@@ -694,15 +803,15 @@
+ 		myFree((void**)&pSongType);
+ 		myFree((void**)&pSongPlayer);
+ 		myFree((void**)&pBigMalloc);
+-		if (nbDrum>0)
++		if ((nbDrum>0) && (pDrumTab))		// [vlc-ym] table peut ne pas exister
+ 		{
+ 			for (ymint i=0;i<nbDrum;i++)
+ 			{
+ 				myFree((void**)&pDrumTab[i].pData);
+ 			}
+-			nbDrum = 0;
+ 			myFree((void**)&pDrumTab);
+ 		}
++		nbDrum = 0;
+ 		myFree((void**)&pBigSampleBuffer);
+ 		myFree((void**)&pMixBlock);
+ 

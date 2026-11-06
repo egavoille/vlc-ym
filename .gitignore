@@ -1,0 +1,6 @@
+*.o
+libym_plugin.so
+libym_plugin.dll
+win/libvlccore.dll.a
+*.wav
+*.raw
