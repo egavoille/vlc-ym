@@ -1,5 +1,7 @@
 # vlc-ym — lecture des musiques .YM dans VLC
 
+![vlc-ym : lecture des musiques .YM (YM2149 / AY-3-8912) dans VLC](docs/apercu.png)
+
 **Auteur : Emmanuel Gavoille** — <egavoille@gmail.com> —
 [lesbidouillesdemonsieurm.com](https://lesbidouillesdemonsieurm.com)
 
